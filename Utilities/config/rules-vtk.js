@@ -52,8 +52,15 @@ module.exports = [
   },
   {
     test: /\.worker\.js$/,
+    type: 'javascript/auto',
     use: [
-      { loader: 'worker-loader', options: { inline: 'no-fallback' } },
+      { 
+        loader: 'worker-loader', 
+        options: { 
+          filename: '[name].[contenthash].worker.js',
+          publicPath: '/'
+        } 
+      },
     ],
   },
 ];

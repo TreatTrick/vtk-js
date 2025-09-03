@@ -26,7 +26,13 @@
       "Read(c:\\Users\\yofo-user\\Downloads\\vtk-js\\Sources\\Rendering/**)",
       "Read(c:\\Users\\yofo-user\\Downloads\\vtk-js\\Sources\\Rendering\\SceneGraph\\RenderPass/**)",
       "mcp__serena__find_referencing_symbols",
-      "Bash(git remote remove:*)"
+      "Bash(git remote remove:*)",
+      "mcp__serena__activate_project",
+      "Bash(npm install)",
+      "Bash(npm run:*)",
+      "Bash(pkill:*)",
+      "Bash(npm install:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []
