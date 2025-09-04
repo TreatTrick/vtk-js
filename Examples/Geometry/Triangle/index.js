@@ -9,8 +9,8 @@ import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper';
 import vtkRenderWindow from '@kitware/vtk.js/Rendering/Core/RenderWindow';
 import vtkRenderer from '@kitware/vtk.js/Rendering/Core/Renderer';
 import vtkOpenGLRenderWindow from '@kitware/vtk.js/Rendering/OpenGL/RenderWindow';
-import vtkRenderWindowInteractor from '@kitware/vtk.js/Rendering/Core/RenderWindowInteractor';
-import vtkInteractorStyleTrackballCamera from '@kitware/vtk.js/Interaction/Style/InteractorStyleTrackballCamera';
+// import vtkRenderWindowInteractor from '@kitware/vtk.js/Rendering/Core/RenderWindowInteractor';
+// import vtkInteractorStyleTrackballCamera from '@kitware/vtk.js/Interaction/Style/InteractorStyleTrackballCamera';
 
 // ----------------------------------------------------------------------------
 // Standard rendering code setup
@@ -92,13 +92,13 @@ renderer.resetCamera();
 // Setup interaction
 // ----------------------------------------------------------------------------
 
-const interactor = vtkRenderWindowInteractor.newInstance();
-interactor.setView(openglRenderWindow);
-interactor.initialize();
-interactor.bindEvents(container);
+// const interactor = vtkRenderWindowInteractor.newInstance();
+// interactor.setView(openglRenderWindow);
+// interactor.initialize();
+// interactor.bindEvents(container);
 
-// Set interactor style
-interactor.setInteractorStyle(vtkInteractorStyleTrackballCamera.newInstance());
+// // Set interactor style
+// interactor.setInteractorStyle(vtkInteractorStyleTrackballCamera.newInstance());
 
 // Start rendering
 renderWindow.render();
