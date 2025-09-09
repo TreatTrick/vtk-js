@@ -73,7 +73,14 @@
       "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\SceneGraph\\ViewNode/**)",
       "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\OpenGL\\ViewNodeFactory/**)",
       "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\OpenGL/**)",
-      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\SceneGraph\\ViewNodeFactory/**)"
+      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\SceneGraph\\ViewNodeFactory/**)",
+      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\OpenGL\\RenderWindow/**)",
+      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\OpenGL\\RenderWindow/**)",
+      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\SceneGraph\\ViewNode/**)",
+      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\SceneGraph\\ViewNodeFactory/**)",
+      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Examples\\Geometry\\Triangle/**)",
+      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\Profiles/**)",
+      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\OpenGL\\Profiles/**)"
     ],
     "deny": [],
     "ask": []
