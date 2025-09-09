@@ -1443,3 +1443,679 @@ vtk.js 的场景图特别适合：
 - 扩展 vtk.js 以满足特定需求
 
 vtk.js 的场景图不仅仅是一个数据结构，它是整个渲染系统的核心协调机制，体现了现代图形系统设计的最佳实践。
+
+## 15. 典型场景图树形结构示例
+
+### 15.1 完整的场景图层次结构
+
+从根节点 RenderWindow 开始，一个典型的 vtk.js 场景图树形结构如下：
+
+```
+RenderWindow (根节点)
+│
+├── Renderer #1 (可以有多个，通过viewport设置不同视口)
+│   │
+│   ├── Camera (ViewNode)
+│   │   └── 相机参数（位置、朝向、投影矩阵、视角等）
+│   │
+│   ├── Light #1 (ViewNode) 
+│   │   └── 光源属性（位置、颜色、强度、类型）
+│   │
+│   ├── Light #2 (ViewNode)
+│   │   └── 光源属性
+│   │
+│   ├── Actor #1 (几何体Actor)
+│   │   │
+│   │   └── PolyDataMapper (ViewNode)
+│   │       │
+│   │       └── PolyData (叶子节点 - 实际的几何数据)
+│   │           ├── Points (顶点数组)
+│   │           ├── Cells (拓扑信息：三角形、线、点等)
+│   │           └── PointData/CellData (属性数据：颜色、法线、纹理坐标等)
+│   │
+│   ├── Actor #2 (另一个几何体)
+│   │   │
+│   │   └── PolyDataMapper
+│   │       │
+│   │       └── PolyData
+│   │           ├── Points
+│   │           ├── Cells
+│   │           └── Attributes
+│   │
+│   ├── Volume (体数据Actor)
+│   │   │
+│   │   └── VolumeMapper (ViewNode)
+│   │       │
+│   │       └── ImageData (叶子节点 - 体数据)
+│   │           ├── Dimensions (三维尺寸)
+│   │           ├── Spacing (体素间距)
+│   │           ├── Origin (原点位置)
+│   │           └── Scalars (标量数据数组)
+│   │
+│   └── Actor2D (2D覆盖层，用于UI元素)
+│       │
+│       └── Mapper2D
+│           │
+│           └── 2D数据（文本、标注、图例等）
+│
+├── Renderer #2 (第二个渲染器，占据不同视口)
+│   │
+│   ├── Camera (独立的相机设置)
+│   ├── Light
+│   ├── Actor
+│   │   └── Mapper
+│   │       └── Data
+│   └── ...
+│
+└── RenderPass (渲染管线节点)
+    │
+    ├── ForwardPass (前向渲染管线)
+    │   ├── BuildPass (构建阶段 - 创建/更新ViewNode)
+    │   ├── QueryPass (查询阶段 - 统计渲染对象)
+    │   ├── CameraPass (相机设置 - 清除缓冲区、设置视图矩阵)
+    │   ├── OpaquePass (不透明物体渲染)
+    │   ├── TranslucentPass (半透明物体渲染 - 需要深度排序)
+    │   ├── VolumePass (体数据渲染)
+    │   └── OverlayPass (覆盖层渲染 - UI元素等)
+    │
+    ├── ShadowPass (阴影渲染管线 - 可选)
+    │   ├── ShadowMapPass (生成阴影贴图)
+    │   └── ShadowRenderPass (应用阴影)
+    │
+    └── PostProcessPass (后处理管线 - 可选)
+        ├── SSAOPass (屏幕空间环境光遮蔽)
+        ├── BloomPass (泛光效果)
+        └── ToneMappingPass (色调映射)
+```
+
+### 15.2 双重场景图的映射关系
+
+vtk.js 的一个核心设计是维护两套平行的场景图结构：
+
+#### 抽象场景图（用户接口层）
+这是用户直接操作的对象树，提供统一的API接口：
+
+```
+vtkRenderWindow
+├── vtkRenderer
+│   ├── vtkCamera
+│   ├── vtkLight
+│   ├── vtkActor
+│   │   ├── vtkProperty (材质属性)
+│   │   └── vtkPolyDataMapper
+│   │       └── vtkPolyData
+│   └── vtkVolume
+│       ├── vtkVolumeProperty
+│       └── vtkVolumeMapper
+│           └── vtkImageData
+```
+
+#### 具体实现场景图（渲染实现层）
+根据选择的渲染后端，动态创建对应的实现对象：
+
+**OpenGL 实现：**
+```
+vtkOpenGLRenderWindow
+├── vtkOpenGLRenderer
+│   ├── vtkOpenGLCamera
+│   ├── vtkOpenGLLight
+│   ├── vtkOpenGLActor
+│   │   └── vtkOpenGLPolyDataMapper
+│   │       ├── VBO (顶点缓冲对象)
+│   │       ├── IBO (索引缓冲对象)
+│   │       └── ShaderProgram (着色器程序)
+│   └── vtkOpenGLVolume
+│       └── vtkOpenGLVolumeMapper
+│           └── 3D纹理对象
+```
+
+**WebGPU 实现：**
+```
+vtkWebGPURenderWindow
+├── vtkWebGPURenderer
+│   ├── vtkWebGPUCamera
+│   ├── vtkWebGPULight
+│   ├── vtkWebGPUActor
+│   │   └── vtkWebGPUPolyDataMapper
+│   │       ├── GPUBuffer (GPU缓冲区)
+│   │       ├── BindGroup (绑定组)
+│   │       └── RenderPipeline (渲染管线)
+│   └── vtkWebGPUVolume
+│       └── vtkWebGPUVolumeMapper
+│           └── 3D纹理资源
+```
+
+### 15.3 多Renderer场景示例
+
+一个 RenderWindow 可以包含多个 Renderer，每个占据不同的视口区域：
+
+```
+RenderWindow (全屏 [0,0,1,1])
+│
+├── Renderer #1 (主视图 - viewport: [0,0,0.7,1])
+│   ├── Camera (透视投影)
+│   ├── Light (主光源)
+│   └── Actor (3D模型)
+│
+├── Renderer #2 (俯视图 - viewport: [0.7,0.5,1,1])
+│   ├── Camera (正交投影，从上往下看)
+│   └── Actor (同一个3D模型的引用)
+│
+├── Renderer #3 (侧视图 - viewport: [0.7,0,1,0.5])
+│   ├── Camera (正交投影，从侧面看)
+│   └── Actor (同一个3D模型的引用)
+│
+└── Renderer #4 (UI层 - viewport: [0,0,1,1])
+    ├── Camera (2D正交投影)
+    └── Actor2D (UI元素、文本标注等)
+```
+
+### 15.4 场景图遍历顺序
+
+渲染时的典型遍历顺序：
+
+1. **BuildPass**：自顶向下遍历，创建/更新 ViewNode
+2. **QueryPass**：统计各类渲染对象数量
+3. **CameraPass**：设置相机，清除缓冲区
+4. **渲染遍历**（按顺序）：
+   - OpaquePass：渲染不透明物体（前到后，利用深度测试）
+   - TranslucentPass：渲染半透明物体（后到前，需要排序）
+   - VolumePass：渲染体数据
+   - OverlayPass：渲染2D覆盖层
+
+### 15.5 关键设计要点
+
+1. **层次清晰**：从 RenderWindow 到具体数据，每一层都有明确的职责
+2. **数据与渲染分离**：Actor/Mapper/Data 三层结构分离了渲染属性、数据处理和原始数据
+3. **动态构建**：ViewNode 树根据场景内容动态创建和销毁
+4. **缓存优化**：通过 visited 标记和映射表避免重复创建
+5. **多视口支持**：通过 viewport 设置实现分屏、画中画等效果
+6. **跨平台抽象**：用户代码不需要关心底层是 OpenGL 还是 WebGPU
+
+这种设计使 vtk.js 能够高效地处理复杂的科学可视化场景，同时保持良好的可扩展性和跨平台能力。
+
+## 16. RenderPass 详解与使用指南
+
+### 16.1 RenderPass 基础架构
+
+RenderPass 是 vtk.js 场景图遍历的核心机制，每个 Pass 负责渲染管线中的特定阶段。基础的 `vtkRenderPass` 提供了通用的遍历框架：
+
+```javascript
+// RenderPass 基本结构
+const DEFAULT_VALUES = {
+  currentOperation: null,           // 当前操作类型
+  currentTraverseOperation: null,   // 当前遍历方法名
+  delegates: [],                    // 代理Pass列表
+  preDelegateOperations: [],        // 前置操作
+  postDelegateOperations: []        // 后置操作
+};
+
+// 核心遍历方法
+publicAPI.traverse = (viewNode, parent = null) => {
+  // 执行前置操作
+  model.preDelegateOperations.forEach((val) => {
+    publicAPI.setCurrentOperation(val);
+    viewNode.traverse(publicAPI);
+  });
+  
+  // 执行代理Pass
+  model.delegates.forEach((val) => {
+    val.traverse(viewNode, publicAPI);
+  });
+  
+  // 执行后置操作  
+  model.postDelegateOperations.forEach((val) => {
+    publicAPI.setCurrentOperation(val);
+    viewNode.traverse(publicAPI);
+  });
+};
+```
+
+### 16.2 主要 RenderPass 类型及其作用
+
+#### 16.2.1 ForwardPass (前向渲染Pass)
+
+**作用**：最常用的渲染Pass，实现标准的前向渲染管线。
+
+**渲染序列**：
+```javascript
+publicAPI.traverse = (viewNode, parent = null) => {
+  // 1. BuildPass - 构建和更新场景图ViewNode
+  publicAPI.setCurrentOperation('buildPass');
+  viewNode.traverse(publicAPI);
+  
+  // 2. 遍历每个渲染器和层级
+  for (let i = 0; i < numlayers; i++) {
+    for (let index = 0; index < renderers.length; index++) {
+      const renNode = viewNode.getViewNodeFor(ren);
+      
+      // 3. QueryPass - 统计渲染对象
+      publicAPI.setCurrentOperation('queryPass');
+      renNode.traverse(publicAPI);
+      
+      // 4. 深度缓冲处理（如果需要）
+      if (needDepthBuffer) {
+        publicAPI.setCurrentOperation('zBufferPass');
+        renNode.traverse(publicAPI);
+      }
+      
+      // 5. CameraPass - 相机设置和背景清除
+      publicAPI.setCurrentOperation('cameraPass');
+      renNode.traverse(publicAPI);
+      
+      // 6. OpaquePass - 渲染不透明物体
+      if (model.opaqueActorCount > 0) {
+        publicAPI.setCurrentOperation('opaquePass');
+        renNode.traverse(publicAPI);
+      }
+      
+      // 7. TranslucentPass - 渲染半透明物体
+      if (model.translucentActorCount > 0) {
+        model.translucentPass.traverse(viewNode, renNode, publicAPI);
+      }
+      
+      // 8. VolumePass - 渲染体数据
+      if (model.volumeCount > 0) {
+        publicAPI.setCurrentOperation('volumePass');
+        renNode.traverse(publicAPI);
+      }
+      
+      // 9. OverlayPass - 渲染覆盖层
+      if (model.overlayActorCount > 0) {
+        publicAPI.setCurrentOperation('overlayPass');
+        renNode.traverse(publicAPI);
+      }
+    }
+  }
+};
+```
+
+**使用场景**：
+- 标准的3D场景渲染
+- 科学可视化应用
+- 大多数常规渲染需求
+
+#### 16.2.2 OrderIndependentTranslucentPass (顺序无关半透明Pass)
+
+**作用**：解决半透明物体的渲染顺序问题，实现正确的透明效果。
+
+**工作原理**：
+1. 使用深度剥离(Depth Peeling)技术
+2. 多次渲染场景，每次剥离一层透明物体
+3. 从前到后累积半透明效果
+
+**关键特性**：
+```javascript
+// 深度剥离实现
+const numPasses = model.maximumNumberOfPeels || 4;
+for (let i = 0; i < numPasses; i++) {
+  // 设置深度剥离参数
+  publicAPI.setCurrentPeelLayer(i);
+  
+  // 渲染当前层的半透明物体
+  renNode.traverse(publicAPI);
+  
+  // 检查是否还有更多层需要渲染
+  if (noMoreLayers) break;
+}
+```
+
+**使用场景**：
+- 医学成像中的多层透明结构
+- 复杂的半透明效果
+- 需要精确透明度控制的应用
+
+#### 16.2.3 Convolution2DPass (2D卷积Pass)
+
+**作用**：实现基于屏幕空间的后处理效果。
+
+**支持的效果**：
+- 模糊效果 (Blur)
+- 锐化效果 (Sharpen)
+- 边缘检测 (Edge Detection)
+- 自定义卷积核效果
+
+**实现原理**：
+```javascript
+// 卷积Pass的实现
+publicAPI.traverse = (viewNode, parent = null) => {
+  // 1. 渲染场景到纹理
+  renderSceneToTexture(viewNode);
+  
+  // 2. 应用卷积核
+  applyConvolutionKernel(model.kernel);
+  
+  // 3. 将结果绘制到屏幕
+  blitToScreen();
+};
+```
+
+**使用场景**：
+- 图像增强
+- 艺术效果
+- 数据可视化中的视觉增强
+
+#### 16.2.4 RadialDistortionPass (径向畸变Pass)
+
+**作用**：模拟或校正镜头的径向畸变效果。
+
+**应用场景**：
+- VR/AR 应用中的镜头畸变校正
+- 鱼眼镜头效果模拟
+- 光学系统仿真
+
+#### 16.2.5 自定义Pass类型
+
+vtk.js 支持创建自定义的 RenderPass：
+
+```javascript
+// 自定义阴影Pass示例
+function vtkShadowMapPass(publicAPI, model) {
+  model.classHierarchy.push('vtkShadowMapPass');
+  
+  publicAPI.traverse = (viewNode, parent = null) => {
+    // 第一遍：从光源角度渲染深度图
+    publicAPI.renderShadowMap(viewNode);
+    
+    // 第二遍：使用阴影贴图渲染场景
+    publicAPI.renderWithShadows(viewNode);
+  };
+  
+  publicAPI.renderShadowMap = (viewNode) => {
+    // 设置光源相机
+    setupLightCamera();
+    
+    // 渲染到深度纹理
+    publicAPI.setCurrentOperation('shadowMapPass');
+    viewNode.traverse(publicAPI);
+  };
+  
+  publicAPI.renderWithShadows = (viewNode) => {
+    // 绑定阴影贴图
+    bindShadowTexture();
+    
+    // 正常渲染流程
+    publicAPI.setCurrentOperation('shadowRenderPass');
+    viewNode.traverse(publicAPI);
+  };
+}
+```
+
+### 16.3 RenderPass 选择与切换指南
+
+#### 16.3.1 根据渲染需求选择Pass
+
+**基础渲染需求**：
+```javascript
+// 使用ForwardPass进行标准渲染
+const renderPass = vtkForwardPass.newInstance();
+renderWindow.setPass(renderPass);
+```
+
+**透明效果需求**：
+```javascript
+// 高质量透明效果
+const forwardPass = vtkForwardPass.newInstance();
+const oitPass = vtkOrderIndependentTranslucentPass.newInstance();
+forwardPass.setTranslucentPass(oitPass);
+renderWindow.setPass(forwardPass);
+```
+
+**后处理效果需求**：
+```javascript
+// 组合多个Pass实现复杂效果
+const forwardPass = vtkForwardPass.newInstance();
+const blurPass = vtkConvolution2DPass.newInstance();
+blurPass.setKernel(gaussianKernel);
+
+// 创建Pass链
+const compositePass = vtkRenderPass.newInstance();
+compositePass.setDelegates([forwardPass, blurPass]);
+renderWindow.setPass(compositePass);
+```
+
+#### 16.3.2 动态Pass切换
+
+**根据场景内容动态切换**：
+```javascript
+function updateRenderPass() {
+  const hasTransparency = checkForTransparentObjects();
+  const needsPostProcess = checkForPostProcessNeeds();
+  
+  let renderPass;
+  
+  if (hasTransparency && needsPostProcess) {
+    // 复杂渲染管线
+    renderPass = createComplexPipeline();
+  } else if (hasTransparency) {
+    // 只需要透明处理
+    renderPass = createTransparencyPipeline();
+  } else {
+    // 标准渲染
+    renderPass = vtkForwardPass.newInstance();
+  }
+  
+  renderWindow.setPass(renderPass);
+}
+```
+
+**基于性能的自适应切换**：
+```javascript
+function adaptivePassSelection() {
+  const frameTime = measureFrameTime();
+  const complexityScore = assessSceneComplexity();
+  
+  if (frameTime > targetFrameTime) {
+    // 降低质量以提高性能
+    if (currentPass === highQualityPass) {
+      renderWindow.setPass(standardPass);
+    }
+  } else if (frameTime < targetFrameTime * 0.7) {
+    // 有性能余量，可以提高质量
+    if (currentPass === standardPass) {
+      renderWindow.setPass(highQualityPass);
+    }
+  }
+}
+```
+
+### 16.4 Pass组合与管线构建
+
+#### 16.4.1 复杂渲染管线示例
+
+```javascript
+// 构建完整的渲染管线
+function createAdvancedPipeline() {
+  // 1. 主渲染Pass
+  const forwardPass = vtkForwardPass.newInstance();
+  
+  // 2. 透明处理
+  const oitPass = vtkOrderIndependentTranslucentPass.newInstance();
+  oitPass.setMaximumNumberOfPeels(6);
+  forwardPass.setTranslucentPass(oitPass);
+  
+  // 3. 后处理链
+  const postProcessChain = vtkRenderPass.newInstance();
+  
+  // 3.1 SSAO Pass (如果实现)
+  const ssaoPass = createSSAOPass();
+  
+  // 3.2 色调映射Pass
+  const toneMappingPass = createToneMappingPass();
+  
+  // 3.3 最终合成Pass
+  postProcessChain.setDelegates([
+    forwardPass,
+    ssaoPass,
+    toneMappingPass
+  ]);
+  
+  return postProcessChain;
+}
+```
+
+#### 16.4.2 条件渲染管线
+
+```javascript
+// 根据数据类型选择不同的渲染策略
+function createDataSpecificPipeline(dataType) {
+  const basePass = vtkForwardPass.newInstance();
+  
+  switch(dataType) {
+    case 'medical':
+      // 医学数据需要高质量透明度
+      const medicalOIT = vtkOrderIndependentTranslucentPass.newInstance();
+      medicalOIT.setMaximumNumberOfPeels(8);
+      basePass.setTranslucentPass(medicalOIT);
+      break;
+      
+    case 'engineering':
+      // 工程数据需要精确的边缘显示
+      const edgePass = vtkConvolution2DPass.newInstance();
+      edgePass.setKernel(edgeDetectionKernel);
+      return createPassChain([basePass, edgePass]);
+      
+    case 'scientific':
+      // 科学数据需要自定义着色
+      const scientificPass = createScientificRenderPass();
+      return scientificPass;
+  }
+  
+  return basePass;
+}
+```
+
+### 16.5 性能优化策略
+
+#### 16.5.1 Pass级别的优化
+
+```javascript
+// Pass性能监控和优化
+function optimizePassPerformance() {
+  const passMetrics = {
+    buildPass: 0,
+    queryPass: 0,
+    opaquePass: 0,
+    translucentPass: 0,
+    volumePass: 0
+  };
+  
+  // 监控各个Pass的耗时
+  const originalSetOperation = renderPass.setCurrentOperation;
+  renderPass.setCurrentOperation = function(operation) {
+    const startTime = performance.now();
+    originalSetOperation.call(this, operation);
+    
+    // 记录当前Pass的开始时间
+    currentPassStartTime = startTime;
+  };
+  
+  // 在Pass完成后记录耗时
+  const recordPassTime = (passName, duration) => {
+    passMetrics[passName] += duration;
+    
+    // 如果某个Pass耗时过长，考虑优化
+    if (duration > performanceThreshold[passName]) {
+      optimizeSpecificPass(passName);
+    }
+  };
+}
+```
+
+#### 16.5.2 自适应质量调整
+
+```javascript
+// 基于帧率的动态质量调整
+function dynamicQualityAdjustment() {
+  const targetFPS = 60;
+  const currentFPS = getCurrentFPS();
+  
+  if (currentFPS < targetFPS * 0.8) {
+    // 降低质量
+    reducePassQuality();
+  } else if (currentFPS > targetFPS * 1.2) {
+    // 提高质量
+    increasePassQuality();
+  }
+}
+
+function reducePassQuality() {
+  // 减少透明层数
+  if (currentOITPass) {
+    const currentPeels = currentOITPass.getMaximumNumberOfPeels();
+    currentOITPass.setMaximumNumberOfPeels(Math.max(2, currentPeels - 1));
+  }
+  
+  // 简化后处理
+  if (postProcessPasses.length > 1) {
+    postProcessPasses.pop();
+    updatePassChain();
+  }
+}
+```
+
+### 16.6 调试和故障排除
+
+#### 16.6.1 Pass执行追踪
+
+```javascript
+// Pass执行追踪工具
+function enablePassDebugging() {
+  const originalTraverse = vtkRenderPass.prototype.traverse;
+  
+  vtkRenderPass.prototype.traverse = function(viewNode, parent) {
+    console.log(`Starting ${this.getClassName()} traverse`);
+    const startTime = performance.now();
+    
+    originalTraverse.call(this, viewNode, parent);
+    
+    const duration = performance.now() - startTime;
+    console.log(`${this.getClassName()} completed in ${duration.toFixed(2)}ms`);
+  };
+}
+```
+
+#### 16.6.2 常见问题诊断
+
+**透明度渲染问题**：
+```javascript
+function diagnoseTransparencyIssues() {
+  const issues = [];
+  
+  // 检查是否使用了适当的透明Pass
+  if (hasTransparentObjects() && !usingTransparencyPass()) {
+    issues.push("场景有透明对象但未使用透明渲染Pass");
+  }
+  
+  // 检查深度剥离设置
+  if (oitPass && oitPass.getMaximumNumberOfPeels() < recommendedPeels) {
+    issues.push("深度剥离层数可能不足");
+  }
+  
+  return issues;
+}
+```
+
+**性能问题诊断**：
+```javascript
+function diagnosePerformanceIssues() {
+  const metrics = collectPassMetrics();
+  const issues = [];
+  
+  // 检查Pass执行时间
+  Object.entries(metrics).forEach(([passName, time]) => {
+    if (time > expectedTime[passName]) {
+      issues.push(`${passName} 执行时间过长: ${time}ms`);
+    }
+  });
+  
+  // 检查不必要的Pass
+  if (hasUnnecessaryPasses()) {
+    issues.push("存在不必要的渲染Pass，建议优化管线");
+  }
+  
+  return issues;
+}
+```
+
+通过合理选择和配置不同的 RenderPass，开发者可以实现从基础渲染到复杂视觉效果的各种需求，同时保持良好的性能表现。
