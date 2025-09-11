@@ -80,7 +80,8 @@
       "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\SceneGraph\\ViewNodeFactory/**)",
       "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Examples\\Geometry\\Triangle/**)",
       "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\Profiles/**)",
-      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\OpenGL\\Profiles/**)"
+      "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\OpenGL\\Profiles/**)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
