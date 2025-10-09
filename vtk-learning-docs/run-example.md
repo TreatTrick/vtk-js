@@ -95,3 +95,7 @@ webpack 5.97.1 compiled successfully in 23785 ms
 第二，有了`launch.json`之后，我们可以点击 vscode 左边的侧边栏的`小虫子 + 三角形`按钮，然后在切换的 tab 页中点击`launch edge`就会弹出浏览器弹窗并且命中我们的断点了。
 
 ![用VSCode Debug](./images/debug-example.png)
+
+## 辅助调式技巧
+
+vtkjs 基于自己定义的宏系统来实现类的继承和接口类（虚类）和类的具体实现之间的对应。
