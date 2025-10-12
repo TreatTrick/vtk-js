@@ -9,8 +9,8 @@
             "request": "launch",
             "type": "msedge",
             "url": "http://localhost:9999",
-            // "webRoot": "${workspaceFolder}/Examples"
-            "webRoot": "${workspaceFolder}/Sources"
+            "webRoot": "${workspaceFolder}/Examples"
+            // "webRoot": "${workspaceFolder}/Sources"
         },
     ]
 }

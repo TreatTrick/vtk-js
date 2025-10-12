@@ -98,4 +98,19 @@ webpack 5.97.1 compiled successfully in 23785 ms
 
 ## 辅助调式技巧
 
-vtkjs 基于自己定义的宏系统来实现类的继承和接口类（虚类）和类的具体实现之间的对应。
+vtkjs 基于自己定义的宏系统来实现类的继承以及接口类（虚类）与具体实现之间的对应。
+
+因此对于我们来说，能够方便的在调试的时候知道类名以及其继承关系就变得非常的重要。
+
+继承关系能让我们清晰快捷的了解vtkjs里面的架构的具体实现。
+
+在 debug 的时候可以方便的通过vs code 的 watch 窗口来访问具体的 js 变量，并且执行 js 代码。比如我们在调试的时候有一个断点触发的页面中有一个变量 child，这个是一个 vtkjs 中定义的类型，遵守 vtkjs 的继承体系，我们想知道这个 child 是什么类型以及 child 的继承链是什么样子的，方便我们对整个 vtk 架构做深入的理解分析。
+![child变量](./images/childDebug.png)
+
+这时候只需要在 watch 窗口中键入 `viewNode.get("classHierarchy")`就可以获取到继承链了. `vtkOpenGLRender --> vtkViewNode --> vtkObject`
+![watch获取继承链](./images/watch.png)
+
+如果想要获取类名，可以直接用 `child.getClassName()`
+![getClassName](./images/getclassname.png)
+
+当然也可以用 `child.someFunction(param1, param2,...)`调用任何的函数，或者用 `child.get("xxx")`获取任何的属性值.
