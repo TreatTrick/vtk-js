@@ -403,14 +403,442 @@ console.log('Volumes:', forwardPass.getVolumeCount());
 console.log('Has depth buffer:', !!forwardPass.getZBufferTexture());
 ```
 
+## 设计模式分析
+
+vtkForwardPass 在实现中巧妙地运用了多种经典设计模式，这些模式使其架构更加灵活、可维护和可扩展。
+
+### 1. 模板方法模式 (Template Method Pattern)
+
+**应用场景**：定义渲染流程的骨架，允许子类重写特定步骤。
+
+```javascript
+// vtkRenderPass 基类定义模板
+class vtkRenderPass {
+  traverse(viewNode, parent) {
+    // 模板方法：定义算法骨架
+    this.preDelegateOperations.forEach(op => {
+      this.setCurrentOperation(op);
+      viewNode.traverse(this);
+    });
+
+    this.delegates.forEach(delegate => {
+      delegate.traverse(viewNode, this);
+    });
+
+    this.postDelegateOperations.forEach(op => {
+      this.setCurrentOperation(op);
+      viewNode.traverse(this);
+    });
+  }
+}
+
+// vtkForwardPass 重写具体实现
+class vtkForwardPass extends vtkRenderPass {
+  traverse(viewNode, parent) {
+    // 重写模板方法，实现具体的渲染流程
+    this.buildPass();     // 具体步骤1
+    this.queryPass();     // 具体步骤2
+    this.renderPasses();  // 具体步骤3
+  }
+}
+```
+
+### 2. 策略模式 (Strategy Pattern)
+
+**应用场景**：根据场景内容动态选择不同的渲染策略。
+
+```javascript
+// 策略接口
+class RenderStrategy {
+  execute(scene) { /* abstract */ }
+}
+
+// 具体策略实现
+class OpaqueOnlyStrategy {
+  execute(scene) {
+    // 仅渲染不透明物体
+    publicAPI.setCurrentOperation('opaquePass');
+    scene.traverse(publicAPI);
+  }
+}
+
+class TranslucentStrategy {
+  execute(scene) {
+    // 使用OIT渲染半透明物体
+    const oitPass = vtkOrderIndependentTranslucentPass.newInstance();
+    oitPass.traverse(scene);
+  }
+}
+
+class MixedStrategy {
+  execute(scene) {
+    // 混合渲染策略：先深度，再分别渲染
+    this.captureZBuffer();
+    this.renderOpaque();
+    this.renderTranslucent();
+    this.renderVolume();
+  }
+}
+
+// vtkForwardPass 中的策略选择
+function selectRenderStrategy() {
+  if (model.volumeCount > 0 && model.opaqueActorCount > 0) {
+    return new MixedStrategy();
+  } else if (model.translucentActorCount > 0) {
+    return new TranslucentStrategy();
+  } else {
+    return new OpaqueOnlyStrategy();
+  }
+}
+```
+
+### 3. 组合模式 (Composite Pattern)
+
+**应用场景**：将渲染过程组织成树形结构，统一处理单个Pass和Pass组合。
+
+```javascript
+// 组件接口
+class RenderComponent {
+  traverse(viewNode) { /* abstract */ }
+}
+
+// 叶子节点
+class SinglePass extends RenderComponent {
+  traverse(viewNode) {
+    // 执行单个渲染操作
+    this.performRendering(viewNode);
+  }
+}
+
+// 组合节点
+class CompositePass extends RenderComponent {
+  constructor() {
+    this.children = [];
+  }
+
+  add(pass) {
+    this.children.push(pass);
+  }
+
+  traverse(viewNode) {
+    // 递归遍历所有子Pass
+    this.children.forEach(child => child.traverse(viewNode));
+  }
+}
+
+// vtkForwardPass 作为组合节点
+const forwardPass = new CompositePass();
+forwardPass.add(new OpaquePass());
+forwardPass.add(new TranslucentPass());
+forwardPass.add(new VolumePass());
+```
+
+### 4. 观察者模式 (Observer Pattern)
+
+**应用场景**：监听渲染状态变化，通知相关组件。
+
+```javascript
+// 主题（被观察者）
+class RenderSubject {
+  constructor() {
+    this.observers = [];
+  }
+
+  attach(observer) {
+    this.observers.push(observer);
+  }
+
+  notify(event) {
+    this.observers.forEach(observer => observer.update(event));
+  }
+}
+
+// vtkForwardPass 实现
+class vtkForwardPass extends RenderSubject {
+  setCurrentOperation(operation) {
+    model.currentOperation = operation;
+    // 通知所有观察者操作已改变
+    this.notify({
+      type: 'operationChanged',
+      operation: operation,
+      timestamp: Date.now()
+    });
+  }
+}
+
+// 观察者实现
+class RenderStatistics {
+  update(event) {
+    if (event.type === 'operationChanged') {
+      console.log(`Entering ${event.operation} at ${event.timestamp}`);
+      this.recordTiming(event.operation, event.timestamp);
+    }
+  }
+}
+
+// 使用示例
+const forwardPass = vtkForwardPass.newInstance();
+const stats = new RenderStatistics();
+forwardPass.attach(stats);
+```
+
+### 5. 建造者模式 (Builder Pattern)
+
+**应用场景**：构建复杂的渲染管线配置。
+
+```javascript
+// 建造者类
+class ForwardPassBuilder {
+  constructor() {
+    this.pass = vtkForwardPass.newInstance();
+  }
+
+  withOpaqueRendering() {
+    this.pass.enableOpaquePass(true);
+    return this;
+  }
+
+  withTranslucentRendering(method = 'OIT') {
+    if (method === 'OIT') {
+      this.pass.setTranslucentPass(
+        vtkOrderIndependentTranslucentPass.newInstance()
+      );
+    } else {
+      this.pass.setTranslucentPass(
+        vtkDepthSortedTranslucentPass.newInstance()
+      );
+    }
+    return this;
+  }
+
+  withVolumeRendering(options = {}) {
+    const volumePass = vtkVolumePass.newInstance();
+    volumePass.setBlendMode(options.blendMode || 'Composite');
+    this.pass.setVolumePass(volumePass);
+    return this;
+  }
+
+  withPostProcessing(effects = []) {
+    effects.forEach(effect => {
+      this.pass.addPostProcessPass(effect);
+    });
+    return this;
+  }
+
+  build() {
+    return this.pass;
+  }
+}
+
+// 使用建造者模式构建复杂渲染管线
+const advancedPass = new ForwardPassBuilder()
+  .withOpaqueRendering()
+  .withTranslucentRendering('OIT')
+  .withVolumeRendering({ blendMode: 'MaximumIntensity' })
+  .withPostProcessing([
+    vtkSSAOPass.newInstance(),
+    vtkBloomPass.newInstance()
+  ])
+  .build();
+```
+
+### 6. 单例模式 (Singleton Pattern)
+
+**应用场景**：确保某些全局资源只有一个实例。
+
+```javascript
+// 深度缓冲管理器单例
+class DepthBufferManager {
+  constructor() {
+    if (DepthBufferManager.instance) {
+      return DepthBufferManager.instance;
+    }
+
+    this.framebuffers = new Map();
+    DepthBufferManager.instance = this;
+  }
+
+  getFramebuffer(renderWindow) {
+    if (!this.framebuffers.has(renderWindow)) {
+      const fb = vtkOpenGLFramebuffer.newInstance();
+      fb.setOpenGLRenderWindow(renderWindow);
+      this.framebuffers.set(renderWindow, fb);
+    }
+    return this.framebuffers.get(renderWindow);
+  }
+
+  static getInstance() {
+    if (!DepthBufferManager.instance) {
+      DepthBufferManager.instance = new DepthBufferManager();
+    }
+    return DepthBufferManager.instance;
+  }
+}
+
+// 在vtkForwardPass中使用
+function setupDepthBuffer(viewNode) {
+  const manager = DepthBufferManager.getInstance();
+  const framebuffer = manager.getFramebuffer(viewNode);
+  // 使用共享的framebuffer
+}
+```
+
+### 7. 责任链模式 (Chain of Responsibility Pattern)
+
+**应用场景**：将渲染请求沿着处理链传递，直到找到合适的处理器。
+
+```javascript
+// 渲染处理器基类
+class RenderHandler {
+  constructor() {
+    this.nextHandler = null;
+  }
+
+  setNext(handler) {
+    this.nextHandler = handler;
+    return handler;
+  }
+
+  handle(renderContext) {
+    if (this.canHandle(renderContext)) {
+      return this.doHandle(renderContext);
+    }
+    if (this.nextHandler) {
+      return this.nextHandler.handle(renderContext);
+    }
+    return false;
+  }
+
+  canHandle(context) { /* abstract */ }
+  doHandle(context) { /* abstract */ }
+}
+
+// 具体处理器
+class OpaqueHandler extends RenderHandler {
+  canHandle(context) {
+    return context.hasOpaqueActors;
+  }
+
+  doHandle(context) {
+    context.setOperation('opaquePass');
+    context.traverse();
+    return true;
+  }
+}
+
+class TranslucentHandler extends RenderHandler {
+  canHandle(context) {
+    return context.hasTranslucentActors;
+  }
+
+  doHandle(context) {
+    context.setOperation('translucentPass');
+    context.traverse();
+    return true;
+  }
+}
+
+// 构建责任链
+const renderChain = new OpaqueHandler();
+renderChain
+  .setNext(new TranslucentHandler())
+  .setNext(new VolumeHandler())
+  .setNext(new OverlayHandler());
+
+// 使用责任链处理渲染
+renderChain.handle(renderContext);
+```
+
+### 8. 实际应用示例：组合多种设计模式
+
+```javascript
+// 综合运用多种设计模式的vtkForwardPass实现
+class AdvancedForwardPass {
+  constructor() {
+    // 策略模式：渲染策略
+    this.strategies = new Map();
+
+    // 观察者模式：性能监控
+    this.observers = [];
+
+    // 单例模式：资源管理
+    this.resourceManager = ResourceManager.getInstance();
+
+    // 建造者模式：配置
+    this.config = null;
+  }
+
+  // 模板方法模式：定义渲染流程
+  traverse(viewNode, parent) {
+    // 前置处理
+    this.preProcess(viewNode);
+
+    // 策略选择
+    const strategy = this.selectStrategy(viewNode);
+
+    // 执行渲染（组合模式）
+    this.executeRenderPasses(strategy, viewNode);
+
+    // 后置处理
+    this.postProcess(viewNode);
+
+    // 通知观察者
+    this.notifyComplete(viewNode);
+  }
+
+  // 策略模式：选择渲染策略
+  selectStrategy(viewNode) {
+    const context = this.analyzeScene(viewNode);
+
+    if (context.isVolumetric) {
+      return this.strategies.get('volumetric');
+    } else if (context.hasTransparency) {
+      return this.strategies.get('transparent');
+    } else {
+      return this.strategies.get('opaque');
+    }
+  }
+
+  // 责任链模式：处理渲染请求
+  executeRenderPasses(strategy, viewNode) {
+    const chain = this.buildRenderChain(strategy);
+    chain.handle({
+      viewNode,
+      pass: this,
+      timestamp: performance.now()
+    });
+  }
+
+  // 建造者模式：构建渲染链
+  buildRenderChain(strategy) {
+    return new RenderChainBuilder()
+      .addHandler(new QueryHandler())
+      .addHandler(new CameraHandler())
+      .addHandlersForStrategy(strategy)
+      .build();
+  }
+
+  // 观察者模式：通知完成
+  notifyComplete(viewNode) {
+    this.observers.forEach(observer => {
+      observer.onRenderComplete({
+        pass: this,
+        viewNode,
+        statistics: this.gatherStatistics()
+      });
+    });
+  }
+}
+```
+
 ## 总结
 
-`vtkForwardPass` 是 vtk.js 渲染系统的核心组件，它通过精心设计的多阶段渲染流程，确保了复杂3D场景的正确渲染。其主要优势包括：
+`vtkForwardPass` 通过巧妙运用这些设计模式，实现了：
 
-1. **完整性**：支持所有类型的3D渲染对象
-2. **正确性**：确保正确的深度测试和颜色混合
-3. **效率**：智能的条件渲染和资源管理
-4. **扩展性**：良好的架构设计支持自定义渲染过程
-5. **跨平台**：同时支持 WebGL 和 WebGPU 渲染后端
+1. **灵活性**：通过策略模式和模板方法模式，支持多种渲染策略的动态切换
+2. **可扩展性**：通过组合模式和建造者模式，方便添加新的渲染阶段
+3. **可维护性**：通过责任链模式和观察者模式，降低组件间的耦合度
+4. **资源效率**：通过单例模式，确保全局资源的有效管理
+5. **代码复用**：通过继承和组合，最大化代码复用
 
-理解 vtkForwardPass 的工作原理对于开发高质量的vtk.js应用程序至关重要，它为实现复杂的科学可视化和医学成像应用提供了坚实的基础。
+这些设计模式的应用使 vtkForwardPass 成为一个健壮、灵活且高效的渲染管线核心组件，为vtk.js的高质量3D渲染提供了坚实的架构基础。理解这些设计模式不仅有助于更好地使用 vtkForwardPass，也为开发自定义渲染过程提供了宝贵的设计思路。
