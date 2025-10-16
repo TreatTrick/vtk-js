@@ -167,8 +167,8 @@ for (let i = 0; i < 4; i++) {
     obj.interactor.setInteractorStyle(vtkInteractorStyleImage.newInstance());
     obj.widgetInstance = obj.widgetManager.addWidget(widget, xyzToViewType[i]);
     obj.widgetInstance.setScaleInPixels(true);
-    obj.widgetInstance.setHoleWidth(50);
-    obj.widgetInstance.setInfiniteLine(false);
+    obj.widgetInstance.setHoleWidth(0);
+    obj.widgetInstance.setInfiniteLine(true);
     widgetState
       .getStatesWithLabel('line')
       .forEach((state) => state.setScale3(4, 4, 300));
