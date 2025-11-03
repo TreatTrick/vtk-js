@@ -81,7 +81,9 @@
       "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Examples\\Geometry\\Triangle/**)",
       "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\Profiles/**)",
       "Read(/C:\\Users\\11541\\Downloads\\vtk-js\\Sources\\Rendering\\OpenGL\\Profiles/**)",
-      "WebSearch"
+      "WebSearch",
+      "Read(//c/Users/yofo-user/Downloads/**)",
+      "mcp__serena__insert_after_symbol"
     ],
     "deny": [],
     "ask": []
