@@ -274,7 +274,6 @@ RenderWindow(vtkProp) --> vtkOpenGLRenderWindow(ViewNode)
 │   ├── Volume (ViewNode)
 │   │   └── VolumeMapper (ViewNode)
 │   └── Actor2D (ViewNode)
-└── RenderPass (ViewNode)
 ```
 
 试想一下渲染三维空间中的两个立方体的整个过程，首先我们要搭建整个场景，也就是`RenderWindow`渲染窗口，因为我们最后的所有东西都要显示在这个窗口中。
@@ -299,7 +298,7 @@ renderWindow.addRenderer(stretchRenderer);
 
 有了立方体之后，还需要添加摄像机`camera`和布置光线`Light`，这样我们的场景基本就搭建完了。当前实际的过程中因为要渲染形形色色的食物，可能需要添加`volume`，`actor2D`等其他充当演员职责的节点。
 
-可以看到，上面的整个过程基本上可以看作是一个树形结构，`RenderWindow`管理一个或者多个`Renderer`，每个`Renderer`，又可以管理自己的`Actor`,自己的`Light`,`camera`等，如果再往下拆分，每个`Actor`又可以有自己的`Mapper`（后面再说），`Mapper`可以有自己的`Dataset`，这样我们就得到了一个树形结构，当我们要渲染这个场景的时候，只要遍历这个树形结构就可以了。
+可以看到，上面的整个过程基本上可以看作是一个树形结构，`RenderWindow`管理一个或者多个`Renderer`，每个`Renderer`，又可以管理自己的`Actor`,自己的`Light`,`camera`等，如果再往下拆分，每个`Actor`又可以有自己的`Mapper`，`Mapper`可以有自己的`Dataset`，这样我们就得到了一个树形结构，当我们要渲染这个场景的时候，只要遍历这个树形结构就可以了。
 
 这就是场景图的基本概念。
 
