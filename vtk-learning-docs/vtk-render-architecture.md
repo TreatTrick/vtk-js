@@ -20,12 +20,16 @@ OpenGL 中的整个渲染过程大概如上图所示。但是 WebGL 中则没有
 
 ## 渲染的基本流程
 
+### 渲染前置知识
+
 假设我们只有一个 3x3 像素的屏幕，想要在里面渲染一个三角形。渲染的过程中有以下这些信息需要提前知道。
 - openGL渲染的坐标系是-1到1的，x轴，y轴，z轴都是-1到1
 - OpenGL中的点的颜色最后会被映射然后写入到颜色缓冲，颜色缓冲区和屏幕上显示的大小一致，在这里是3x3像素，颜色缓冲区最后的颜色就是屏幕显示的颜色
 - 除了颜色缓冲区还有深度缓冲区和模板缓冲区，都和屏幕像素大小一样，这些缓冲区都可以写入一定的值，在渲染时发挥辅助作用，比如深度缓冲可以存储深度信息，在渲染时候做到物体遮挡的效果
 - 默认的摄像机视角是在（0,0,1）位置，看向（0,0,0）中心，可以设置摄像机的视野大小,因为坐标系是-1到1的空间，视野最小是-1，最大是1，这里我们设置为横向（-1,1），纵向（-1，1），因为相机拍到的永远是一个二维平面。一般情况下我们习惯用平行投影来获取摄像机的拍摄的图像，平行投影的情况下，等价于摄像机在无穷远处。
 - 屏幕的三个缓冲都只有一份，不存在多份。
+
+### 渲染点
 
 如下图，有三个红色的点最后渲染到屏幕上的结果。
 
@@ -35,6 +39,8 @@ OpenGL 中的整个渲染过程大概如上图所示。但是 WebGL 中则没有
 
 >注意：openGL里面摄像机其实是一个伪概念，我们移动摄像机用不同的方向看到不同的图像只是比较好理解而已，本质上，都是将渲染的点乘以一个变换矩阵，移动到了空间中的另一个地方，你可以理解为摄像机的移动其实等价于物体朝反方向的移动。
 
+### 渲染有遮挡物的场景
+
 我们现在假设有一个蓝色的点刚好挡在左上角红点之前，那么最后蓝色的点需要将红色的点遮住，那openGL如何知道谁遮住谁呢？这就需要用到深度缓冲了，我们深度缓冲的值在0到1的范围，1最远，0最近。
 
 如下图，每次渲染一个物体的时候的时候，openGL都会将其深度信息写入到对应位置的深度缓冲中，只有新渲染的物体的深度缓冲值比原来深度缓冲的值小的时候，才会将这个地方的颜色缓冲区的颜色替换，并且将新的更小的深度缓冲值写入对应的深度缓冲。
@@ -43,6 +49,8 @@ OpenGL 中的整个渲染过程大概如上图所示。但是 WebGL 中则没有
 >模板缓冲这里不介绍了，设计到一些高级用法，感兴趣的自己搜索查看
 
 思考一下，先渲染蓝色点和先渲染红色点的先后顺序重要吗？结果一致还是不同？
+
+### 渲染三角形
 
 刚刚都是渲染点，现在假设我们要渲染一个三角形，并且每个顶点都是不同的颜色。
 
@@ -395,4 +403,77 @@ renderWindow.addRenderer(stretchRenderer);
 - **多渲染后端支持**: 通过虚拟节点和具体实现节点的映射,支持 OpenGL/WebGPU 等多种渲染后端。
 
 ### RenderPass 架构
+
+前文提过，渲染的过程是从根节点开始向所有的场景图中的节点进行遍历，但是在这个遍历的过程中vtkjs还用了两个设计模式来实现了所谓的RenderPass架构。
+
+- 状态机模式
+- 访问者模式
+
+#### renderPass执行基本流程
+
+渲染窗口renderwindow的实现，比如vtkOpenGLRenderWindow，中可以添加一个或多个继承自vtkRenderPass的类，这些类都实现了下面两个方法。
+```javascript
+publicAPI.traverse = (viewNode, parent = null){
+  //具体实现
+  }
+
+ publicAPI.setCurrentOperation = (operation) {
+  //设置当前的operation状态
+ }
+```
+然后当调用`renderwindow`的`render()`函数执行渲染的时候，vtkRenderPass会有如下的执行流程
+```javascript
+//vtkRenderPass调用自己的traverse函数
+publicAPI.traverse = (viewNode, parent = null) => {
+    //设置当前的状态为APass
+    publicAPI.setCurrentOperation('APass');
+    //节点树节点调用traverse函数执行遍历自身和所有子节点，并且传入publicAPI，也就是vtkRenderPass
+    viewNode.traverse(publicAPI);
+    publicAPI.setCurrentOperation('BPass');
+    viewNode.traverse(publicAPI);
+    //完成所有的pass
+    publicAPI.setCurrentOperation('NPass');
+    viewNode.traverse(publicAPI)
+}
+```
+
+```javascript
+
+//每一个节点树中有这样的伪代码，这里publiAPI是viewNode
+  publicAPI.traverse = (renderPass) => {
+    //获取renderPass的当前Operation，currentOperation是APass，BPass，..., NPass，每次不一样
+    const currentOperation = renderPass.getOperation();
+    //看当前节点中是否存在名字为currentOperation的函数，比如APass(a, b),...,NPass(a, b) 
+    const customRenderPass = publicAPI[currentOperation];
+    if (customRenderPass) {
+      //函数存在就在当前节点ViewNode执行这个函数NPass(prepass, renderpass)
+      customRenderPass(prepass, renderPass);
+    }
+
+    //遍历期所有子节点，执行一样的traverse操作
+    for (let index = 0; index < model.children.length; index++) {
+      model.children[index].traverse(renderPass);
+    }
+  }
+```
+这里可以看到，vtkRenderPass类似于一个状态机，里面可以切换不同的状态，然后在通过访问者模式让各个节点访问其状态并且执行相应的函数，完成整个渲染过程。
+
+#### 为什么要设计renderPass的模式
+##### 思考1
+先思考一个关键问题：
+假设你有一个红色的不透明球体和一个蓝色的半透明球体，它们在 3D 空间中有重叠。从摄像机的视角看，红色球在前，蓝色球在后。
+
+问题：如果我们先渲染红球，再渲染蓝球，会发生什么？如果反过来呢？
+
+提示：想想深度缓冲在这个过程中的作用。
+
+##### 思考2
+
+再思考第二个场景：
+现在反过来，红色不透明球在后，蓝色半透明球在前。
+
+问题：这种情况下，渲染顺序应该是什么？为什么？
+
+提示：半透明物体需要与背后的颜色进行混合。
+
 
