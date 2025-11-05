@@ -84,7 +84,8 @@
       "WebSearch",
       "Read(//c/Users/yofo-user/Downloads/**)",
       "mcp__serena__insert_after_symbol",
-      "mcp__serena__think_about_collected_information"
+      "mcp__serena__think_about_collected_information",
+      "mcp__serena__initial_instructions"
     ],
     "deny": [],
     "ask": []
