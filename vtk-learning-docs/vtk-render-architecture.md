@@ -459,21 +459,235 @@ publicAPI.traverse = (viewNode, parent = null) => {
 这里可以看到，vtkRenderPass类似于一个状态机，里面可以切换不同的状态，然后在通过访问者模式让各个节点访问其状态并且执行相应的函数，完成整个渲染过程。
 
 #### 为什么要设计renderPass的模式
-##### 思考1
-先思考一个关键问题：
-假设你有一个红色的不透明球体和一个蓝色的半透明球体，它们在 3D 空间中有重叠。从摄像机的视角看，红色球在前，蓝色球在后。
 
-问题：如果我们先渲染红球，再渲染蓝球，会发生什么？如果反过来呢？
+##### 思考1
+
+假设你有两个不透明的物体A和B，从摄像机的角度看，A在3D空间中遮住B。
+
+问题：这个时候应该先渲染哪个？渲染顺序是否重要？
 
 提示：想想深度缓冲在这个过程中的作用。
 
 ##### 思考2
+假设你有一个红色的不透明球体和一个蓝色的半透明球体，它们在 3D 空间中有重叠。从摄像机的视角看，红色球在前，蓝色球在后。
 
-再思考第二个场景：
+问题：这个时候应该先渲染哪个？渲染顺序是否重要？
+
+提示：想想深度缓冲在这个过程中的作用。
+
+##### 思考3
+
 现在反过来，红色不透明球在后，蓝色半透明球在前。
 
 问题：这种情况下，渲染顺序应该是什么？为什么？
 
 提示：半透明物体需要与背后的颜色进行混合。
 
+##### 思考4
+
+现在思考一个更复杂的场景，假设你有：
+
+3个不透明物体：A（最远）、B（中间）、C（最近）
+2个半透明物体：D（中间位置）、E（最近）
+
+完整的渲染顺序应该是什么？
+
+##### 渲染时候的正确顺序
+
+正确的渲染流程应该是：
+1. 不透明物体阶段（任意顺序）
+  - 渲染所有不透明物体
+  - 写入颜色缓冲 + 写入深度缓冲
+1. 半透明物体阶段（必须从后往前）
+  - 按照距离摄像机的距离排序
+  - 从远到近依次渲染
+  - 读取颜色缓冲进行混合 + 深度测试（但不写入深度缓冲）
+
+问题：为什么半透明物体不写入深度缓冲？如果写入会发生什么？
+
+##### 总结
+
+为什么vtkjs要将渲染分为多个renderPass分别进行，其实就是像上面一样需要正确的处理透明的物体和不透明的物体之间的关系。
+
+#### 典型RenderPass的详细说明
+
+这里我们看默认的renderPass类vtkForwordPass中包含的各个阶段及其作用
+
+```javascript
+// ForwardPass 的渲染流程
+1. buildPass      // 构建场景
+2. queryPass      // 查询场景中的actor类型
+3. zBufferPass    // 生成深度缓冲（如需要）
+4. cameraPass     // 设置相机参数
+5. opaquePass     // 渲染不透明物体
+6. translucentPass// 渲染半透明物体
+7. volumePass     // 渲染体数据
+8. overlayPass    // 渲染覆盖层
+```
+
+##### 1. buildPass - 构建场景图
+
+**作用**: 构建和更新场景图中的所有ViewNode节点，将虚节点全部构建为对应的实现节点。确保场景图结构与当前的vtk对象树保持同步。
+
+##### 2. queryPass - 查询统计Actor类型
+
+**作用**: 统计场景中不同类型Actor的数量，为后续渲染阶段提供决策依据。
+
+**执行过程**:
+- 遍历场景图中的所有Actor节点
+- 根据Actor的属性（透明度、类型等）进行分类计数
+- 更新ForwardPass中的计数器：
+  - `opaqueActorCount`: 不透明Actor数量
+  - `translucentActorCount`: 半透明Actor数量
+  - `volumeCount`: 体数据数量
+  - `overlayActorCount`: 覆盖层Actor数量
+
+##### 3. zBufferPass - 生成深度缓冲
+
+**作用**: 在特定情况下预先渲染场景的深度信息，用于后续的深度测试和体渲染混合。
+
+**执行过程**:
+- 创建或复用Framebuffer对象
+- 将渲染目标切换到Framebuffer
+- 仅渲染几何体的深度信息到深度纹理，不写入颜色
+- 恢复原渲染目标
+
+**应用场景**:
+```javascript
+// 体数据渲染时需要深度信息来正确混合
+if ((opaqueActorCount > 0 || translucentActorCount > 0) && volumeCount > 0) {
+  // 先执行zBufferPass获取表面深度
+  // 然后在volumePass中使用这个深度纹理
+  // 实现体数据与表面的正确遮挡关系
+}
+```
+问题: 这里为什么要创建framebuffer不使用屏幕默认的深度缓冲？
+
+##### 4. cameraPass - 设置相机参数
+
+**作用**: 计算和更新相机相关的变换矩阵，将这些矩阵传递给GPU着色器。
+
+**执行过程**:
+- 获取当前Renderer的Camera对象
+- 计算视图矩阵（View Matrix）：将世界坐标转换到相机坐标系
+- 计算投影矩阵（Projection Matrix）：实现透视或正交投影
+- 计算视口变换矩阵
+- 更新相机的裁剪平面范围
+- 将这些矩阵作为uniform变量传递给着色器
+
+##### 5. opaquePass - 渲染不透明物体
+
+**作用**: 渲染场景中所有不透明的Actor，这是最主要的渲染阶段。
+
+**执行过程**:
+- 启用深度测试（depth test）和深度写入（depth write）
+- 按照任意顺序渲染所有不透明Actor
+- 写入颜色缓冲和深度缓冲
+
+##### 6. translucentPass - 渲染半透明物体
+
+**作用**: 使用特殊的算法渲染半透明物体，确保正确的颜色混合效果。
+
+**执行过程**:
+- 根据Actor到相机的距离进行从后往前排序
+- 启用颜色混合（blending）
+- 禁用深度写入，但保持深度测试
+- 按照排序后的顺序依次渲染
+
+##### 7. volumePass - 渲染体数据
+
+**作用**: 使用体绘制（Volume Rendering）技术渲染三维体数据，如CT/MRI医学影像。
+
+**执行过程**:
+- 使用光线投射（Ray Casting）或纹理切片技术
+- 如果之前执行了zBufferPass，使用深度纹理进行遮挡判断
+- 对体数据进行采样和插值
+- 应用传输函数（Transfer Function）映射数据值到颜色和透明度
+- 执行体渲染合成算法
+
+##### 8. overlayPass - 渲染覆盖层
+
+**作用**: 渲染始终显示在最前面的2D覆盖元素，如UI控件、文字标注等。
+
+**执行过程**:
+- 禁用深度测试（确保始终在最前面）
+- 使用正交投影（2D坐标系）
+- 渲染所有overlay属性为true的Actor2D
+- 通常用于渲染文字、图标、刻度尺等UI元素
+
+
+### 添加后处理RendePass
+
+假设我们现在有这样的需求，希望将渲染的结果，比如一个全景图，当做一张图片来做后处理，做一些锐化模糊之类的操作，那要如何做呢？
+
+vtkjs其实给每一个继承子vtkRenderPass的类提供了下面的这样一个接口。
+```javascript
+//vtkRenderPass的接口函数,可以将其他renderPass设置为代理
+publicAPI.setDelegates = (renderPasses)=>{
+    model.delegates = renderPasses
+}
+
+//然后执行自己的traverse函数的时候可以在适当的时候调用这些其他renderPass代理
+ publicAPI.traverse = (viewNode) => {
+   //其他代码
+
+   //调用代理的其他renderpass完成渲染
+    model.delegates.forEach((val) => {
+        val.traverse(viewNode, publicAPI);
+    });
+
+   //执行渲染后的后处理
+ }
+```
+
+通过这个接口我们可以将刚刚的vtkForwardPass和我们的后处理pass结合在一起，做到后处理功能。
+
+```javascript
+//自定义的后处理renderPass，vtkImageProcessPass,有下列伪代码
+publicAPI.traverse = (viewNode, parent = null) => {
+
+    //准备帧缓冲，让渲染的图像存到这个framebuffer中
+    if (model.framebuffer === null) {
+      model.framebuffer = vtkOpenGLFramebuffer.newInstance()
+    }
+
+    //存储原来的帧缓冲，大部分情况下就是屏幕换种
+    model.framebuffer.setOpenGLRenderWindow(viewNode)
+    model.framebuffer.saveCurrentBindingsAndBuffers()
+
+    //绑定我们的自定义帧缓冲
+    model.framebuffer.bind()
+
+    //让代理的renderPass完成渲染，这时候渲染的结果存到了我们的自定义帧缓冲中
+    model.delegates.forEach(val => {
+      val.traverse(viewNode, publicAPI)
+    })
+
+    //回复保存的屏幕帧缓冲
+    model.framebuffer.restorePreviousBindingsAndBuffers()
+
+    //常见自定义后处理着色器，将刚刚的帧缓冲中获取纹理，传入着色器，做后处理
+    //着色器将处理后的图写入屏幕缓冲
+```
+然后我们知道vtk的渲染窗口执行渲染的时候会走默认renderPass的traverse函数，这里我们将其替换为我们自定义的renderPass。
+```javascript
+//创建我们自定义的vtkImageProcessPass
+const imageProcessPass = vtkImageProcessPass.newInstance()
+
+//创建forwardPass，并且将其作为我们的renderPass的代理
+const forwardPass = vtkForwardPass.newInstance()
+imageProcessPass.setDelegates([forwardPass])
+
+//替换渲染时候的renderPass为我们的renderPass
+vtkOpenGLRenderWindow.setRenderPasses([imageProcessPass])
+//渲染
+renderWindow.render()
+```
+这样渲染时候就会执行我们定义的renderPass的流程，大致如下，假设我们的后处理是高斯模糊。
+
+1. 创建帧缓冲，并激活
+2. forwardPass渲染，这时候渲染到我们的帧缓冲
+3. 将我们的帧缓冲当做纹理让着色器处理，高斯模糊，然后渲染到屏幕
+
+![后处理](./images/postImageProcess.png)
 
