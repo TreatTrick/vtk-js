@@ -13,3 +13,5 @@ macro.event(publicAPI, model, 'EndInteractionEvent');
 ```
 
 这些事件可以被外部用到 InteractorObserver 的 on{EventName}方法监听。比如 widget（继承 InteractorObserver）的实例就可以通过这个方法发送事件，然后这些事件还可以带参数，给外部提供更多信息。
+
+widgetManager 监听 Interactor 的事件，用 on{EventName}方法监听事件，然后根据事件处理，负责激活某个被选中的 abstractWidget 实例。**注意这里是 on{EventName}方法监听的 Interactor 的事件，而不是 InteractorObserver 的 handle{EventName}事件。**
