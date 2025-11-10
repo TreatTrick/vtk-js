@@ -499,9 +499,9 @@ const defaultValues = (initialValues = {}) => ({
   cursorStyles: initialValues.cursorStyles
     ? { ...initialValues.cursorStyles }
     : {
-      default: 'default',
-      hover: 'pointer',
-    },
+        default: 'default',
+        hover: 'pointer',
+      },
 });
 
 // ----------------------------------------------------------------------------
